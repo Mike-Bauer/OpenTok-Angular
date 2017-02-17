@@ -33,18 +33,11 @@ ng.module('opentok', [])
         streams: [],
         connections: [],
         publishers: [],
-        init: function(apiKey, sessionId, token, cb) {
+        init: function(apiKey, sessionId) {
           this.session = OT.initSession(apiKey, sessionId);
-
+          
           OTSession.session.on({
             sessionConnected: function() {
-              OTSession.publishers.forEach(function(publisher) {
-                OTSession.session.publish(publisher, function(err) {
-                  if (err) {
-                    $rootScope.$broadcast('otPublisherError', err, publisher);
-                  }
-                });
-              });
             },
             streamCreated: function(event) {
               $rootScope.$apply(function() {
@@ -73,16 +66,28 @@ ng.module('opentok', [])
               });
             }
           });
-
-          this.session.connect(token, function(err) {
-            if (cb) cb(err, OTSession.session);
-          });
           this.trigger('init');
+          return OT.checkSystemRequirements();
+        },
+        connect: function(token, cb) {
+          this.session.connect(token, function(err) {
+            if (cb) cb(err);
+          });
+        },
+        initPublisher: function(targetElement, props, cb) {
+          return OT.initPublisher(targetElement, props, function(err) {
+            if (cb) cb(err);
+          });
+        },
+        publish: function(publisher, cb) {
+          OTSession.session.publish(publisher, function(err) {
+            if (cb) cb(err);
+          });
         },
         addPublisher: function(publisher) {
           this.publishers.push(publisher);
           this.trigger('otPublisherAdded');
-        }
+        },
       };
       OT.$.eventing(OTSession);
       return OTSession;
@@ -122,62 +127,19 @@ ng.module('opentok', [])
       return {
         restrict: 'E',
         scope: {
-          props: '&'
+          props: '&',
+          callBack: '&',
         },
         link: function(scope, element, attrs) {
           var props = scope.props() || {};
           props.width = props.width ? props.width : ng.element(element).width();
           props.height = props.height ? props.height : ng.element(element).height();
           var oldChildren = ng.element(element).children();
-          scope.publisher = OT.initPublisher(attrs.apikey || OTSession.session.apiKey,
-            element[0], props, function(err) {
-              if (err) {
-                scope.$emit('otPublisherError', err, scope.publisher);
-              }
-            });
+          if (scope.callBack) {
+            scope.callBack({initPublisherProperties:{targetElement:element[0], props:props}});
+          }
           // Make transcluding work manually by putting the children back in there
           ng.element(element).append(oldChildren);
-          scope.publisher.on({
-            accessDenied: function() {
-              scope.$emit('otAccessDenied');
-            },
-            accessDialogOpened: function() {
-              scope.$emit('otAccessDialogOpened');
-            },
-            accessDialogClosed: function() {
-              scope.$emit('otAccessDialogClosed');
-            },
-            accessAllowed: function() {
-              ng.element(element).addClass('allowed');
-              scope.$emit('otAccessAllowed');
-            },
-            loaded: function() {
-              scope.$emit('otLayout');
-            },
-            streamCreated: function(event) {
-              scope.$emit('otStreamCreated', event);
-            },
-            streamDestroyed: function(event) {
-              scope.$emit('otStreamDestroyed', event);
-            }
-          });
-          scope.$on('$destroy', function() {
-            if (OTSession.session) OTSession.session.unpublish(scope.publisher);
-            else scope.publisher.destroy();
-            OTSession.publishers = OTSession.publishers.filter(function(publisher) {
-              return publisher !== scope.publisher;
-            });
-            scope.publisher = null;
-          });
-          if (OTSession.session && (OTSession.session.connected ||
-            (OTSession.session.isConnected && OTSession.session.isConnected()))) {
-            OTSession.session.publish(scope.publisher, function(err) {
-              if (err) {
-                scope.$emit('otPublisherError', err, scope.publisher);
-              }
-            });
-          }
-          OTSession.addPublisher(scope.publisher);
         }
       };
     }
@@ -192,7 +154,7 @@ ng.module('opentok', [])
         },
         link: function(scope, element) {
           var stream = scope.stream,
-            props = scope.props() || {};
+          props = scope.props() || {};
           props.width = props.width ? props.width : ng.element(element).width();
           props.height = props.height ? props.height : ng.element(element).height();
           var oldChildren = ng.element(element).children();
@@ -207,6 +169,7 @@ ng.module('opentok', [])
           // Make transcluding work manually by putting the children back in there
           ng.element(element).append(oldChildren);
           scope.$on('$destroy', function() {
+            console.log('in subscriber destroy');
             OTSession.session.unsubscribe(subscriber);
           });
         }
