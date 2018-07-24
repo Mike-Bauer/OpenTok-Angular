@@ -88,6 +88,12 @@ ng.module('opentok', [])
           this.publishers.push(publisher);
           this.trigger('otPublisherAdded');
         },
+        registerScreenSharingExtension: function(browser, extensionId, version) {
+          return OT.registerScreenSharingExtension(browser, extensionId, version);
+        },
+        checkScreenSharingCapability: function() {
+          return OT.checkScreenSharingCapability();
+        },
       };
       OT.$.eventing(OTSession);
       return OTSession;
@@ -169,7 +175,6 @@ ng.module('opentok', [])
           // Make transcluding work manually by putting the children back in there
           ng.element(element).append(oldChildren);
           scope.$on('$destroy', function() {
-            console.log('in subscriber destroy');
             OTSession.session.unsubscribe(subscriber);
           });
         }
